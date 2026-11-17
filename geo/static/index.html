@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GeoPulse - Live Area Intelligence</title>
+  <link rel="stylesheet" href="/static/vendor/maplibre-gl.css" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <aside id="panel" aria-label="Area intelligence panel">
+    <header class="brand">
+      <div>
+        <h1>GeoPulse</h1>
+        <p id="area-name" class="muted">Loading area…</p>
+        <button id="btn-area" type="button" class="btn-link">Change area &amp; settings</button>
+      </div>
+      <div class="updated"><span class="pulse" aria-hidden="true"></span><span id="updated">connecting</span></div>
+    </header>
+    <div id="sources" class="sources" aria-label="Data sources"></div>
+
+    <section class="kpis" aria-label="Key numbers">
+      <div class="kpi"><span class="kpi-label">Area busyness</span><span class="kpi-value" id="k-busy">–</span><span class="kpi-sub" id="k-busy-sub"></span></div>
+      <div class="kpi"><span class="kpi-label">Busier than usual</span><span class="kpi-value" id="k-surge">–</span><span class="kpi-sub" id="k-surge-sub"></span></div>
+      <div class="kpi"><span class="kpi-label">Road congestion</span><span class="kpi-value" id="k-cong">–</span><span class="kpi-sub" id="k-cong-sub"></span></div>
+      <div class="kpi"><span class="kpi-label">Avg. time people stay</span><span class="kpi-value" id="k-dwell">–</span><span class="kpi-sub" id="k-dwell-sub"></span></div>
+    </section>
+
+    <section aria-label="Trends">
+      <h2>Last 24 hours</h2>
+      <div class="spark" id="spark-busy" data-title="Area busyness index" data-key="busyness_index" data-unit=""></div>
+      <div class="spark" id="spark-cong" data-title="Road congestion" data-key="congestion_pct" data-unit="%"></div>
+    </section>
+
+    <section aria-label="Hotspots">
+      <h2>Hotspots right now</h2>
+      <ol id="hotspots" class="hotspots"></ol>
+    </section>
+
+    <section aria-label="Venues">
+      <div class="row-between">
+        <h2>Venues</h2>
+        <select id="venue-sort" aria-label="Sort venues">
+          <option value="busyness">Busiest now</option>
+          <option value="delta">Most above usual</option>
+          <option value="stay_load">Biggest staying crowd</option>
+          <option value="reviews">Most reviewed</option>
+        </select>
+      </div>
+      <table class="venues">
+        <thead><tr><th>Venue</th><th>Now</th><th>vs usual</th><th>Stay</th></tr></thead>
+        <tbody id="venue-rows"></tbody>
+      </table>
+    </section>
+
+    <footer class="actions">
+      <button id="btn-refresh" type="button">Refresh live data</button>
+      <a class="btn-secondary" href="/api/export/venues.csv">Export CSV</a>
+    </footer>
+  </aside>
+
+  <main id="map" aria-label="Live map"></main>
+
+  <div id="layers" class="map-card layers" role="group" aria-label="Map layers">
+    <label><input type="checkbox" data-layer="heat" checked /> Crowd density</label>
+    <label><input type="checkbox" data-layer="venues" checked /> Venues</label>
+    <label><input type="checkbox" data-layer="roads" checked /> Road flow</label>
+    <label><input type="checkbox" data-layer="zones" /> Zones</label>
+  </div>
+  <div id="legend" class="map-card legend" aria-label="Map legend"></div>
+  <form id="area-editor" class="map-card area-editor" hidden aria-label="Choose area">
+    <div class="row-between"><h2>Choose area</h2><button type="button" id="ae-close" class="btn-link" aria-label="Close">✕</button></div>
+
+    <label class="fld">Search a place
+      <input id="ae-search" type="search" placeholder="e.g. Patia, Bhubaneswar" autocomplete="off" />
+    </label>
+    <ul id="ae-results" class="ae-results"></ul>
+    <p class="hint">…or <b>click anywhere on the map</b> to put the centre there.</p>
+
+    <label class="fld">Area name <input id="ae-name" required maxlength="120" /></label>
+    <div class="fld-row">
+      <label class="fld">Latitude <input id="ae-lat" type="number" step="any" required /></label>
+      <label class="fld">Longitude <input id="ae-lng" type="number" step="any" required /></label>
+    </div>
+    <label class="fld">Radius <span id="ae-radius-val" class="muted"></span>
+      <input id="ae-radius" type="range" min="300" max="5000" step="100" />
+    </label>
+
+    <fieldset class="fld">
+      <legend>Venue types to track</legend>
+      <label><input type="checkbox" class="ae-group" value="restaurant,cafe,coffee_shop,fast_food_restaurant" /> Food &amp; drink</label>
+      <label><input type="checkbox" class="ae-group" value="shopping_mall,clothing_store,supermarket,department_store" /> Shopping</label>
+      <label><input type="checkbox" class="ae-group" value="bar,gym,movie_theater,park" /> Leisure &amp; nightlife</label>
+      <label><input type="checkbox" class="ae-group" value="hospital,pharmacy,bank,tourist_attraction" /> Services &amp; attractions <span class="muted">(live keys only)</span></label>
+    </fieldset>
+
+    <div class="fld-row">
+      <label class="fld">Max venues <input id="ae-max" type="number" min="5" max="60" required /></label>
+      <label class="fld">Timezone <input id="ae-tz" list="ae-tz-list" required /></label>
+      <datalist id="ae-tz-list"></datalist>
+    </div>
+
+    <p id="ae-cost" class="hint"></p>
+    <p id="ae-error" class="error" hidden></p>
+    <div class="actions">
+      <button type="submit" id="ae-apply" class="primary">Apply &amp; collect</button>
+      <button type="button" id="ae-cancel">Cancel</button>
+    </div>
+  </form>
+
+  <div id="tooltip" class="chart-tip" role="tooltip" hidden></div>
+
+  <script src="/static/vendor/maplibre-gl.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
